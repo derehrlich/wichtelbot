@@ -1,0 +1,50 @@
+# Wichtelbot auf CasaOS: App-Store → „Benutzerdefinierte App installieren" → diese Datei einfügen.
+# Anleitung: docs/casaos.md. Die Werte mit „HIER_…" vorher durch deine eigenen ersetzen.
+name: wichtelbot
+services:
+  wichtelbot:
+    image: ghcr.io/derehrlich/wichtelbot:latest
+    container_name: wichtelbot
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    volumes:
+      # Hier liegt die Datenbank mit allen Teilnehmern und Auslosungen. Diesen Ordner bitte sichern.
+      - /DATA/AppData/wichtelbot/data:/data
+    environment:
+      TZ: Europe/Berlin
+      # Öffentliche Adresse mit https, ohne Schrägstrich am Ende
+      SITE_URL: https://wichtel.ehrlichverwirrt.de
+      # Deine E-Mail-Adresse: Du bist der Organisator (mehrere mit Komma trennen)
+      ADMIN_EMAIL: HIER_DEINE_MAIL
+      # Von https://resend.com (API Keys). Ohne Schlüssel gehen keine Mails raus.
+      RESEND_API_KEY: HIER_RESEND_SCHLUESSEL
+      # Absender, muss zu einer bei Resend bestätigten Domain gehören
+      MAIL_FROM: "Wichtelbot <wichtel@ehrlichverwirrt.de>"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+x-casaos:
+  architectures:
+    - amd64
+  main: wichtelbot
+  author: Marcel Ehrlich
+  category: Family
+  description:
+    de_de: Wichtelbot, Familien-Wichteln mit Auslosung per Mail, Wunschzetteln und Erinnerungen
+    en_us: Wichtelbot, family Secret Santa with draw by mail, wish lists and reminders
+  title:
+    custom: Wichtelbot
+  port_map: "3100"
+  index: /
