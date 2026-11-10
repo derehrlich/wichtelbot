@@ -311,6 +311,23 @@ test('HTTP: Wichtel-Link ohne Anmeldung, falsche Links 404, kein Zugriff außerh
   assert.equal((await http(app.handler, 'GET', '/healthz')).status, 200);
 });
 
+test('HTTP: Seiten verweisen auf versionierte Dateien, Zwischenspeicher passt dazu', async () => {
+  const { service } = setup();
+  const app = createApp({ service, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
+  for (const page of ['/', '/anmelden', '/wichtel/abcdefghijklmnopqrstuvwx']) {
+    const r = await http(app.handler, 'GET', page);
+    assert.equal(r.status, 200);
+    assert.ok(!r.text.includes('{{V}}'), 'Platzhalter ersetzt');
+    assert.equal(r.headers.get('cache-control'), 'no-store', 'Seite selbst nie zwischenspeichern');
+  }
+  const home = await http(app.handler, 'GET', '/');
+  const v = home.text.match(/app\.js\?v=([0-9a-f]{10})/)[1];
+  const js = await http(app.handler, 'GET', `/app.js?v=${v}`);
+  assert.match(js.headers.get('cache-control'), /immutable/);
+  assert.equal((await http(app.handler, 'GET', '/app.js')).headers.get('cache-control'), 'no-store');
+  assert.equal((await http(app.handler, 'GET', '/app.js?v=falsch')).headers.get('cache-control'), 'no-store');
+});
+
 test('HTTP: Organisator legt Person an und löst aus', async () => {
   const { service, mailer } = setup();
   const app = createApp({ service, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
