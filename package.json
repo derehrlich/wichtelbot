@@ -1,0 +1,14 @@
+{
+  "name": "wichtelbot",
+  "version": "0.1.0",
+  "description": "Wichteln für die Familie: Auslosung per Mail, Wünsche und Erinnerungen",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}
