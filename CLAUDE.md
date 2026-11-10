@@ -17,5 +17,8 @@
 - Texte in der Oberfläche nie als HTML einsetzen (immer `textContent`/`append`).
 - Docker: läuft als root mit `cap_drop: ALL`, weil der NAS-Ordner root gehört.
 
+- Das Budget ist für alle fest (Standard `100 €`, Einstellung `BUDGET`), kein Eingabefeld. Die Spalte `users.budget` ist ungenutzt.
+- „Alles zurücksetzen" (`POST /api/admin/reset`, Bestätigung `ZURUECKSETZEN`) löscht alle Teilnehmer außer den Organisatoren, alle Runden, Ausnahmen und `mail_log`.
+
 ## Geplant (Stufe 2)
 KI-Geschenkideen aus den Wünschen (Claude API) auf der Wichtel-Seite und in den Erinnerungsmails. Nur Interessen und Budget senden, keine Namen.

@@ -72,24 +72,22 @@ function wishView() {
     name: el('input', { value: u.name, maxLength: 80, id: 'f-name' }),
     wishes: el('textarea', { value: u.wishes, maxLength: 3000, id: 'f-wishes', placeholder: 'z. B. Kaffee, Wandern, Fantasy-Bücher, Bastelzeug …' }),
     noGos: el('textarea', { value: u.noGos, maxLength: 1000, id: 'f-nogos', placeholder: 'z. B. keine Socken, keine Deko', style: 'min-height:70px' }),
-    budget: el('input', { value: u.budget, maxLength: 100, id: 'f-budget', placeholder: 'z. B. bis 30 €' }),
   };
   const save = async (ev) => {
     ev.preventDefault();
     try {
-      const p = await api('PUT', '/api/me', { name: f.name.value, wishes: f.wishes.value, noGos: f.noGos.value, budget: f.budget.value });
+      const p = await api('PUT', '/api/me', { name: f.name.value, wishes: f.wishes.value, noGos: f.noGos.value });
       state.user = p;
       flash(out, 'Gespeichert. Danke!');
     } catch (e) { flash(out, e.message, 'err'); }
   };
   return el('div', { class: 'card' },
     el('h2', {}, 'Mein Wunschzettel'),
-    el('p', { class: 'hint' }, 'Das sieht nur die Person, die dich beim Wichteln zieht, sonst niemand.'),
+    el('p', { class: 'hint' }, `Das sieht nur die Person, die dich beim Wichteln zieht, sonst niemand. Das Budget ist für alle gleich: ${state.budget}.`),
     el('form', { onsubmit: save },
       el('label', { htmlFor: 'f-name' }, 'Mein Name'), f.name,
       el('label', { htmlFor: 'f-wishes' }, 'Was wünsche ich mir?'), f.wishes,
       el('label', { htmlFor: 'f-nogos' }, 'Lieber nicht'), f.noGos,
-      el('label', { htmlFor: 'f-budget' }, 'Budget'), f.budget,
       el('button', { type: 'submit', class: 'green' }, 'Speichern')),
     out);
 }
@@ -173,6 +171,14 @@ function adminView() {
     await reload(text);
   }, { host: out });
 
+  const resetBtn = action('Alles zurücksetzen', async () => {
+    const q = `ACHTUNG: Das löscht ALLE Teilnehmer (außer dir) und ALLE Auslosungen. Das geht nicht rückgängig.\n\nWirklich alles zurücksetzen?`;
+    if (!confirm(q)) return;
+    if (!confirm('Bist du ganz sicher? Danach ist die Liste leer.')) return;
+    const r = await api('POST', '/api/admin/reset', { confirm: 'ZURUECKSETZEN' });
+    await reload(`Zurückgesetzt. ${r.removedUsers} Teilnehmer und alle Auslosungen sind gelöscht.`);
+  }, { cls: 'small', host: out });
+
   return el('div', { class: 'card' },
     el('h2', {}, 'Organisator'),
     !admin.mailConfigured ? msg('Mailversand ist noch nicht eingerichtet (RESEND_API_KEY fehlt). Mails werden nur ins Server-Log geschrieben.', 'warn') : null,
@@ -188,20 +194,22 @@ function adminView() {
     el('h3', {}, 'Auslosung'),
     admin.round ? el('p', {}, `Letzte Auslosung: ${admin.round.year} (${new Date(admin.round.drawnAt).toLocaleDateString('de-DE')}).`) : el('p', {}, 'Es wurde noch nicht ausgelost.'),
     el('p', { class: 'hint' }, 'Wer „nimmt teil“ angehakt hat, wird ausgelost. Wen du gezogen hast, siehst du als Organisator nur in deiner eigenen Mail, so wie alle anderen.'),
-    drawBtn, out);
+    drawBtn,
+    el('h3', {}, 'Zurücksetzen'),
+    el('p', { class: 'hint' }, 'Nach einem Test: löscht alle Teilnehmer außer dir und alle Auslosungen, damit du neu anfangen kannst. Dein Name und deine Wünsche bleiben.'),
+    resetBtn, out);
 }
 
 function editBox(u, reload, out) {
   const f = {
     name: el('input', { value: u.name, maxLength: 80 }), email: el('input', { type: 'email', value: u.email }),
     wishes: el('textarea', { value: u.wishes, maxLength: 3000 }), noGos: el('textarea', { value: u.noGos, maxLength: 1000, style: 'min-height:60px' }),
-    budget: el('input', { value: u.budget, maxLength: 100 }),
   };
   return el('details', { class: 'edit' }, el('summary', {}, `${u.name} bearbeiten`),
     el('label', {}, 'Name'), f.name, el('label', {}, 'E-Mail'), f.email,
-    el('label', {}, 'Wünsche'), f.wishes, el('label', {}, 'Lieber nicht'), f.noGos, el('label', {}, 'Budget'), f.budget,
+    el('label', {}, 'Wünsche'), f.wishes, el('label', {}, 'Lieber nicht'), f.noGos,
     action('Speichern', async () => {
-      await api('PATCH', `/api/admin/users/${u.id}`, { name: f.name.value, email: f.email.value, wishes: f.wishes.value, noGos: f.noGos.value, budget: f.budget.value });
+      await api('PATCH', `/api/admin/users/${u.id}`, { name: f.name.value, email: f.email.value, wishes: f.wishes.value, noGos: f.noGos.value });
       await reload(`${f.name.value} gespeichert.`);
     }, { cls: 'green small', host: out }));
 }

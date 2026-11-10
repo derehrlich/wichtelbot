@@ -146,6 +146,57 @@ test('Erinnerung: frische Auslosung im November löst keine Oktober-/November-Ma
   assert.equal(mailer.outbox.length, n);
 });
 
+test('Budget ist immer 100 € und steht in Mail und Wichtel-Seite', async () => {
+  const { service, mailer } = setup();
+  await addFamily(service, 3);
+  const n = mailer.outbox.length;
+  await service.runDraw();
+  const mails = mailer.outbox.slice(n);
+  for (const m of mails) assert.match(m.text, /Budget: 100 €/);
+  const token = mails[0].text.match(/wichtel\/([\w-]+)/)[1];
+  assert.equal(service.wichtelByToken(token).budget, '100 €');
+  assert.equal(service.meState(service.internals.q.userById.get(1)).budget, '100 €');
+});
+
+test('Reset: löscht alle Teilnehmer außer dem Organisator, alle Auslosungen und Ausnahmen', async () => {
+  const { service, db } = setup();
+  await addFamily(service, 4);
+  const [a, b] = service.adminState().users.filter((u) => u.name !== 'Chef');
+  service.addExclusion(a.id, b.id);
+  await service.runDraw();
+  const chef = service.adminState().users.find((u) => u.isAdmin);
+  service.updateProfile(chef.id, { wishes: 'Tee' });
+
+  const r = service.resetAll();
+  assert.equal(r.removedUsers, 4);
+  const st = service.adminState();
+  assert.equal(st.users.length, 1);
+  assert.equal(st.users[0].email, 'chef@example.de');
+  assert.equal(st.users[0].wishes, 'Tee', 'Organisator behält seine Wünsche');
+  assert.equal(st.round, null);
+  assert.equal(st.exclusions.length, 0);
+  for (const t of ['rounds', 'assignments', 'mail_log']) assert.equal(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c, 0);
+});
+
+test('HTTP: Reset nur für Organisator und nur mit Bestätigung', async () => {
+  const { service, mailer } = setup();
+  const app = createApp({ service, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
+  await addFamily(service, 2);
+  const login = async (email) => {
+    await service.requestLogin(email);
+    const v = await http(app.handler, 'POST', '/api/auth/verify', { body: { token: mailer.outbox.at(-1).text.match(/token=([\w-]+)/)[1] } });
+    return v.cookie.split(';')[0];
+  };
+  const anna = await login('anna@example.de');
+  assert.equal((await http(app.handler, 'POST', '/api/admin/reset', { cookie: anna, body: { confirm: 'ZURUECKSETZEN' } })).status, 403);
+  const chef = await login('chef@example.de');
+  assert.equal((await http(app.handler, 'POST', '/api/admin/reset', { cookie: chef, body: {} })).status, 400);
+  const ok = await http(app.handler, 'POST', '/api/admin/reset', { cookie: chef, body: { confirm: 'ZURUECKSETZEN' } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.removedUsers, 2);
+  assert.equal((await http(app.handler, 'GET', '/api/me', { cookie: chef })).status, 200, 'Organisator bleibt angemeldet');
+});
+
 test('berlinParts: Sommer- und Winterzeit', () => {
   assert.deepEqual(berlinParts(new Date('2026-08-01T07:30:00Z')), { y: 2026, m: 8, d: 1, hour: 9 });
   assert.deepEqual(berlinParts(new Date('2026-12-31T23:30:00Z')), { y: 2027, m: 1, d: 1, hour: 0 });

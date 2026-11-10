@@ -30,6 +30,12 @@ Im Cloudflare-Dashboard beim bestehenden Tunnel einen **Public Hostname** hinzuf
 2. Unter **Organisator** alle Teilnehmer mit Name und E-Mail eintragen. Jeder bekommt eine Einladung.
 3. Ausnahmen setzen (z. B. Paare), dann **Jetzt auslosen**. Alle bekommen eine Mail mit ihrem Wichtel.
 
+## Nach einem Test alles zurücksetzen
+Im Organisator-Bereich ganz unten gibt es **Alles zurücksetzen**. Das löscht alle Teilnehmer (außer dir), alle Auslosungen und alle Ausnahmen. Du wirst zweimal gefragt. Dein eigener Name und deine Wünsche bleiben.
+
+## Budget
+Das Budget ist für alle gleich und steht in den Mails und auf der Wichtel-Seite: **100 €**. Ändern lässt es sich über die Einstellung `BUDGET` in CasaOS (z. B. `50 €`).
+
 ## Wer hat kein Smartphone?
 Es reicht eine E-Mail-Adresse, die er irgendwo öffnen kann (PC, Tablet, Handy von jemand anderem). Die Mail mit dem Wichtel kommt direkt an. Seine Wünsche kannst du über **Bearbeiten** für ihn eintragen.
 
