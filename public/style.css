@@ -91,6 +91,7 @@ td.actions button { margin-left: 4px; }
 .tag { font: 700 12px var(--pixel); padding: 3px 7px 1px; border-radius: 3px; background: var(--gold); color: var(--frame); border: 2px solid var(--frame); }
 .tag.green { background: #9bd48a; }
 .tag.gray { background: #cfc3ad; }
+code { background: rgba(58, 33, 18, .1); padding: 0 4px; border-radius: 3px; font-size: 14px; }
 .reminder { padding: 10px 12px; margin: 8px 0; background: rgba(255, 250, 240, .6); border: 2px dashed var(--gold); border-radius: 5px; }
 details { margin-top: 8px; }
 details > summary { cursor: pointer; font-weight: 600; color: var(--green-dark); }

@@ -227,6 +227,58 @@ test('Erinnerungs-Termine: Standard, ändern, Überblick, Prüfung der Eingabe',
   assert.equal(loadSettings(db).hour, 18, 'fehlerhafte Eingabe ändert nichts');
 });
 
+test('Erinnerungs-Texte: Standard, ändern, Platzhalter, Prüfung, Probe-Mail', async () => {
+  const { db, mailer, service, clock } = setup('2025-12-01T12:00:00Z');
+  await addFamily(service, 3);
+  await service.runDraw();
+  const admin = service.internals.q.userById.get(1);
+  const t = () => service.adminState().reminders.texts;
+
+  assert.equal(t().assign1.custom, false);
+  assert.match(t().assign1.body, /\{name\}/);
+
+  service.setReminders({
+    hour: 9,
+    wishes: { enabled: true, month: 8, day: 1 }, assign1: { enabled: true, month: 10, day: 1 }, assign2: { enabled: true, month: 11, day: 1 },
+    texts: { assign1: { subject: 'Psst {name}: {wichtel} wartet', body: 'Moin {name}!\n\nBudget {budget} <b>nicht fett</b>.' } },
+  });
+  assert.equal(t().assign1.custom, true);
+  assert.equal(t().assign2.custom, false, 'andere Erinnerungen bleiben Standard');
+
+  clock.t = new Date('2026-10-01T08:00:00Z');
+  const n = mailer.outbox.length;
+  await runReminders({ db, service, mailer, siteUrl: SITE, now: clock.t, log: () => {} });
+  const mails = mailer.outbox.slice(n);
+  assert.equal(mails.length, 4);
+  const m = mails.find((x) => x.to === 'anna@example.de');
+  assert.match(m.subject, /^Psst Anna: \S+ wartet$/);
+  assert.match(m.text, /Moin Anna!/);
+  assert.match(m.text, /Budget 100 €/);
+  assert.ok(m.html.includes('&lt;b&gt;nicht fett&lt;/b&gt;'), 'HTML im Text wird nicht ausgeführt');
+  assert.ok(!m.html.includes('<b>nicht fett</b>'));
+  assert.match(m.html, /wichtel\/[\w-]+/, 'Knopf führt zur Wichtel-Seite');
+
+  // Standardtext einsetzen = nichts gespeichert
+  service.setReminders({ hour: 9, wishes: { enabled: true, month: 8, day: 1 }, assign1: { enabled: true, month: 10, day: 1 }, assign2: { enabled: true, month: 11, day: 1 },
+    texts: { assign1: { subject: t().assign1.defaultSubject, body: t().assign1.defaultBody } } });
+  assert.equal(t().assign1.custom, false);
+
+  // Unbekannte Platzhalter und zu lange Texte werden abgelehnt, es ändert sich nichts
+  const base = { hour: 9, wishes: { enabled: true, month: 8, day: 1 }, assign1: { enabled: true, month: 10, day: 1 }, assign2: { enabled: true, month: 11, day: 1 } };
+  assert.throws(() => service.setReminders({ ...base, texts: { wishes: { subject: 'Hi', body: 'Hallo {vorname}' } } }), /vorname/);
+  assert.throws(() => service.setReminders({ ...base, texts: { wishes: { subject: 'x'.repeat(151), body: '' } } }), UserError);
+  assert.equal(t().wishes.custom, false);
+
+  // Probe-Mail geht an den Organisator und zeigt eine Beispiel-Person, nie den echten Wichtel
+  const k = mailer.outbox.length;
+  await service.sendReminderTest(admin, { id: 'assign2', subject: '', body: '' });
+  const probe = mailer.outbox[k];
+  assert.equal(probe.to, 'chef@example.de');
+  assert.match(probe.subject, /^\[Probe\] .*Beispiel-Person/);
+  await assert.rejects(() => service.sendReminderTest(admin, { id: 'assign2', subject: '', body: '{foo}' }), UserError);
+  await assert.rejects(() => service.sendReminderTest(admin, { id: 'nix', subject: '', body: '' }), (e) => e.status === 404);
+});
+
 test('Organisator kann einer Person den Wichtel erneut mailen (geht nur an sie)', async () => {
   const { service, mailer } = setup();
   await addFamily(service, 3);
@@ -309,6 +361,23 @@ test('HTTP: Wichtel-Link ohne Anmeldung, falsche Links 404, kein Zugriff außerh
   assert.equal((await http(app.handler, 'GET', `/api/wichtel/${'x'.repeat(43)}`)).status, 404);
   assert.equal((await http(app.handler, 'GET', '/..%2fpackage.json')).status, 404);
   assert.equal((await http(app.handler, 'GET', '/healthz')).status, 200);
+});
+
+test('HTTP: Seiten verweisen auf versionierte Dateien, Zwischenspeicher passt dazu', async () => {
+  const { service } = setup();
+  const app = createApp({ service, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
+  for (const page of ['/', '/anmelden', '/wichtel/abcdefghijklmnopqrstuvwx']) {
+    const r = await http(app.handler, 'GET', page);
+    assert.equal(r.status, 200);
+    assert.ok(!r.text.includes('{{V}}'), 'Platzhalter ersetzt');
+    assert.equal(r.headers.get('cache-control'), 'no-store', 'Seite selbst nie zwischenspeichern');
+  }
+  const home = await http(app.handler, 'GET', '/');
+  const v = home.text.match(/app\.js\?v=([0-9a-f]{10})/)[1];
+  const js = await http(app.handler, 'GET', `/app.js?v=${v}`);
+  assert.match(js.headers.get('cache-control'), /immutable/);
+  assert.equal((await http(app.handler, 'GET', '/app.js')).headers.get('cache-control'), 'no-store');
+  assert.equal((await http(app.handler, 'GET', '/app.js?v=falsch')).headers.get('cache-control'), 'no-store');
 });
 
 test('HTTP: Organisator legt Person an und löst aus', async () => {

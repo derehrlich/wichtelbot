@@ -49,6 +49,18 @@ Es reicht eine E-Mail-Adresse, die er irgendwo öffnen kann (PC, Tablet, Handy v
 
 Das sind die Standardtermine. Im Organisator-Bereich unter **Erinnerungen** siehst du, wann die nächste Mail rausgeht und an wie viele die letzte ging. Dort kannst du Tag und Monat jeder Erinnerung und die Uhrzeit ändern oder eine Erinnerung ausschalten. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt. Jede Mail geht pro Person nur einmal pro Jahr raus.
 
+## Mail-Texte der Erinnerungen ändern
+Im Organisator-Bereich unter **Erinnerungen** gibt es bei jeder Erinnerung den Punkt **Mail-Text ansehen und ändern**. Dort stellst du Betreff und Text ein. Ein Absatz endet mit einer Leerzeile. Diese Platzhalter werden beim Versenden ersetzt:
+
+| Platzhalter | Wird zu |
+|---|---|
+| `{name}` | Name der Person, die die Mail bekommt |
+| `{wichtel}` | Name des gezogenen Wichtels |
+| `{budget}` | das Budget (z. B. 100 €) |
+| `{jahr}` | Jahr der Auslosung |
+
+Mit **Probe-Mail an mich** schickst du dir die Mail zur Ansicht. Darin steht „Beispiel-Person", nie dein echter Wichtel. **Standardtext einsetzen** holt die ursprüngliche Fassung zurück. Unter dem Text zeigt die Mail bei den „Du beschenkst"-Erinnerungen automatisch den Namen des Wichtels und den Knopf zur Wichtel-Seite. Gespeichert wird alles mit **Erinnerungen speichern**.
+
 ## Wichtel nochmal mailen
 Hat jemand seine Mail verloren, klickst du in der Teilnehmerliste bei der Person auf **Wichtel nochmal mailen**. Die Mail geht nur an diese Person, du siehst den Namen nicht. Die Person selbst kann auf der Startseite auch „Mail nochmal schicken" wählen.
 
