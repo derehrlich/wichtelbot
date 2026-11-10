@@ -7,7 +7,7 @@
 
 ## Technik
 - Node 22, **keine Abhängigkeiten** (`node:sqlite`, `node:http`, `fetch`). Mail über Resend (`lib/mail.mjs`).
-- `server.mjs` verdrahtet alles; `lib/service.mjs` = Logik, `lib/app.mjs` = HTTP, `lib/reminders.mjs` = Erinnerungen, `lib/draw.mjs` = Auslosung, `lib/templates.mjs` = Mailtexte, `public/` = Oberfläche (Pixel-Look, Logo und Wald von Marcel).
+- `server.mjs` verdrahtet alles; `lib/service.mjs` = Logik, `lib/app.mjs` = HTTP, `lib/reminders.mjs` = Erinnerungen, `lib/draw.mjs` = Auslosung, `lib/templates.mjs` = Mailtexte, `public/` = Oberfläche (Pixel-Look, Logo und Winterwald von Marcel).
 - Tests: `npm test` (`test/run.test.mjs`). Vor jedem Push ausführen, neue Funktionen bekommen einen Test.
 
 ## Wichtige Regeln
