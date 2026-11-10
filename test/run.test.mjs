@@ -5,7 +5,7 @@ import { createMailer } from '../lib/mail.mjs';
 import { createService, UserError } from '../lib/service.mjs';
 import { createApp } from '../lib/app.mjs';
 import { draw } from '../lib/draw.mjs';
-import { runReminders, berlinParts } from '../lib/reminders.mjs';
+import { runReminders, berlinParts, reminderOverview, loadSettings } from '../lib/reminders.mjs';
 
 const SITE = 'https://wichtel.example.de';
 
@@ -195,6 +195,60 @@ test('HTTP: Reset nur für Organisator und nur mit Bestätigung', async () => {
   assert.equal(ok.status, 200);
   assert.equal(ok.json.removedUsers, 2);
   assert.equal((await http(app.handler, 'GET', '/api/me', { cookie: chef })).status, 200, 'Organisator bleibt angemeldet');
+});
+
+test('Erinnerungs-Termine: Standard, ändern, Überblick, Prüfung der Eingabe', async () => {
+  const { db, mailer, service, clock } = setup('2025-12-01T12:00:00Z');
+  await addFamily(service, 3);
+  await service.runDraw();
+  const run = (iso) => { clock.t = new Date(iso); return runReminders({ db, service, mailer, siteUrl: SITE, now: clock.t, log: () => {} }); };
+
+  let ov = service.adminState().reminders;
+  assert.equal(ov.hour, 9);
+  assert.deepEqual(ov.items.map((i) => i.nextDate), ['2026-08-01', '2026-10-01', '2026-11-01']);
+  assert.equal(ov.items[1].lastSent, null);
+
+  // Erste Erinnerung auf den 15. September verlegen, zweite ausschalten, Uhrzeit 18 Uhr
+  service.setReminders({ hour: 18, wishes: { enabled: false, month: 8, day: 1 }, assign1: { enabled: true, month: 9, day: 15 }, assign2: { enabled: false, month: 11, day: 1 } });
+  assert.equal((await run('2026-08-01T10:00:00Z')).sent, 0, 'Wunschzettel ist aus');
+  assert.equal((await run('2026-10-01T08:00:00Z')).sent, 0, 'zweite Erinnerung ist aus, erste war im September fällig');
+  assert.equal((await run('2026-09-15T12:00:00Z')).sent, 0, 'vor 18 Uhr nichts (14:00 deutsche Zeit)');
+  assert.equal((await run('2026-09-15T16:00:00Z')).sent, 4, '18 Uhr deutsche Zeit erreicht');
+  assert.equal((await run('2026-09-16T16:00:00Z')).sent, 0, 'nicht doppelt');
+
+  ov = reminderOverview(db, clock.t);
+  assert.equal(ov.items[1].lastSent.count, 4);
+  assert.equal(ov.items[1].lastSent.year, 2026);
+  assert.equal(ov.items[1].nextDate, '2027-09-15', 'Termin dieses Jahres ist vorbei');
+  assert.equal(ov.items[2].nextDate, null, 'ausgeschaltet');
+
+  assert.throws(() => service.setReminders({ hour: 25, wishes: {}, assign1: {}, assign2: {} }), UserError);
+  assert.throws(() => service.setReminders({ hour: 9, wishes: { enabled: true, month: 2, day: 31 }, assign1: { month: 10, day: 1 }, assign2: { month: 11, day: 1 } }), UserError);
+  assert.equal(loadSettings(db).hour, 18, 'fehlerhafte Eingabe ändert nichts');
+});
+
+test('Organisator kann einer Person den Wichtel erneut mailen (geht nur an sie)', async () => {
+  const { service, mailer } = setup();
+  await addFamily(service, 3);
+  await assert.rejects(() => service.resendAssignmentTo(2), (e) => e.status === 404, 'vor der Auslosung nicht möglich');
+  await service.runDraw();
+  const anna = service.adminState().users.find((u) => u.name === 'Anna');
+  const n = mailer.outbox.length;
+  await service.resendAssignmentTo(anna.id);
+  assert.equal(mailer.outbox.length, n + 1);
+  const m = mailer.outbox.at(-1);
+  assert.equal(m.to, 'anna@example.de');
+  assert.match(m.text, /Du hast|Du beschenkst|\n {2}\S/);
+});
+
+test('Mails mit dem gezogenen Namen landen nicht im Log (auch ohne Resend-Schlüssel)', async () => {
+  const lines = [];
+  const { createMailer: mk } = await import('../lib/mail.mjs');
+  const mailer = mk({ log: (l) => lines.push(l) });
+  await mailer.send({ to: 'a@example.de', subject: 'Du hast Bernd gezogen', text: 'Bernd', secret: true });
+  await mailer.send({ to: 'a@example.de', subject: 'Anmelde-Link', text: 'https://x/anmelden?token=1' });
+  assert.ok(!lines[0].includes('Bernd'));
+  assert.ok(lines[1].includes('token=1'));
 });
 
 test('berlinParts: Sommer- und Winterzeit', () => {

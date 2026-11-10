@@ -141,6 +141,11 @@ function adminView() {
       el('td', { class: 'actions' },
         el('button', { class: 'small ghost', type: 'button', onclick: () => { edit.open = !edit.open; } }, 'Bearbeiten'),
         action('Einladung', async () => { await api('POST', `/api/admin/users/${u.id}/invite`); flash(out, `Einladung an ${u.name} geschickt.`); }, { cls: 'small ghost', host: out }),
+        u.inRound ? action('Wichtel nochmal mailen', async () => {
+          if (!confirm(`${u.name} den gezogenen Wichtel noch einmal per Mail schicken? Du siehst den Namen dabei nicht.`)) return;
+          await api('POST', `/api/admin/users/${u.id}/resend-draw`);
+          flash(out, `Die Mail mit dem Wichtel ist an ${u.name} unterwegs.`);
+        }, { cls: 'small ghost', host: out }) : null,
         u.isAdmin ? null : action('Löschen', async () => {
           if (!confirm(`${u.name} wirklich löschen?`)) return;
           await api('DELETE', `/api/admin/users/${u.id}`); await reload();
@@ -195,9 +200,47 @@ function adminView() {
     admin.round ? el('p', {}, `Letzte Auslosung: ${admin.round.year} (${new Date(admin.round.drawnAt).toLocaleDateString('de-DE')}).`) : el('p', {}, 'Es wurde noch nicht ausgelost.'),
     el('p', { class: 'hint' }, 'Wer „nimmt teil“ angehakt hat, wird ausgelost. Wen du gezogen hast, siehst du als Organisator nur in deiner eigenen Mail, so wie alle anderen.'),
     drawBtn,
+    el('h3', {}, 'Erinnerungen'),
+    remindersView(out, reload),
     el('h3', {}, 'Zurücksetzen'),
     el('p', { class: 'hint' }, 'Nach einem Test: löscht alle Teilnehmer außer dir und alle Auslosungen, damit du neu anfangen kannst. Dein Name und deine Wünsche bleiben.'),
     resetBtn, out);
+}
+
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const REMINDER_TEXT = {
+  wishes: ['Wunschzettel', 'Bitte die Wünsche eintragen oder aktualisieren (nur an alle, die dieses Jahr noch nichts eingetragen haben).'],
+  assign1: ['Erste Erinnerung', 'Jeder bekommt noch einmal: „Du beschenkst …“ mit den Wünschen.'],
+  assign2: ['Zweite Erinnerung', 'Dasselbe noch einmal, jetzt mit dem Hinweis, dass es Zeit wird, etwas zu besorgen.'],
+};
+const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+
+function remindersView(out, reload) {
+  const rem = admin.reminders;
+  const hour = el('select', { id: 'r-hour' }, Array.from({ length: 24 }, (_, h) => el('option', { value: h, selected: h === rem.hour }, `${String(h).padStart(2, '0')}:00 Uhr`)));
+  const rows = rem.items.map((r) => {
+    const on = el('input', { type: 'checkbox', checked: r.enabled, id: `r-on-${r.id}` });
+    const day = el('input', { type: 'number', min: 1, max: 31, value: r.day, 'aria-label': 'Tag', style: 'width:70px' });
+    const month = el('select', { 'aria-label': 'Monat' }, MONTHS.map((n, i) => el('option', { value: i + 1, selected: i + 1 === r.month }, n)));
+    const [title, text] = REMINDER_TEXT[r.id];
+    return { id: r.id, on, day, month, node: el('div', { class: 'reminder' },
+      el('label', { htmlFor: `r-on-${r.id}`, style: 'display:flex;gap:8px;align-items:center' }, on, el('b', {}, title)),
+      el('div', { class: 'hint' }, text),
+      el('div', { class: 'row', style: 'margin-top:6px' }, el('div', {}, el('label', {}, 'Tag'), day), el('div', {}, el('label', {}, 'Monat'), month)),
+      el('div', { class: 'hint' },
+        r.enabled ? `Nächster Versand: ${fmtDay(r.nextDate)}.` : 'Ausgeschaltet.',
+        r.lastSent ? ` Zuletzt: ${r.lastSent.count} Mails (${r.lastSent.year}).` : ' Bisher nichts verschickt.')) };
+  });
+  return el('div', {},
+    el('p', { class: 'hint' }, 'Hier siehst du, wann die automatischen Erinnerungen rausgehen, und kannst die Termine ändern. Jede Mail geht pro Person nur einmal im Jahr raus. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt.'),
+    rows.map((r) => r.node),
+    el('div', { class: 'row' }, el('div', {}, el('label', { htmlFor: 'r-hour' }, 'Uhrzeit (deutsche Zeit)'), hour)),
+    action('Termine speichern', async () => {
+      const body = { hour: Number(hour.value) };
+      for (const r of rows) body[r.id] = { enabled: r.on.checked, day: Number(r.day.value), month: Number(r.month.value) };
+      await api('PUT', '/api/admin/reminders', body);
+      await reload('Die Erinnerungs-Termine sind gespeichert.');
+    }, { cls: 'green', host: out }));
 }
 
 function editBox(u, reload, out) {

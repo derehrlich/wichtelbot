@@ -20,5 +20,8 @@
 - Das Budget ist für alle fest (Standard `100 €`, Einstellung `BUDGET`), kein Eingabefeld. Die Spalte `users.budget` ist ungenutzt.
 - „Alles zurücksetzen" (`POST /api/admin/reset`, Bestätigung `ZURUECKSETZEN`) löscht alle Teilnehmer außer den Organisatoren, alle Runden, Ausnahmen und `mail_log`.
 
+- Erinnerungs-Termine (Tag, Monat, Ein/Aus, Uhrzeit) stehen in `settings` (Schlüssel `reminders`) und sind im Organisator-Bereich einstellbar (`PUT /api/admin/reminders`). Standard: 1.8., 1.10., 1.11. um 9 Uhr.
+- Mails mit dem gezogenen Namen werden mit `secret: true` verschickt und nie ins Log geschrieben. Die Oberfläche zeigt dem Organisator die Zuordnung nirgends; er kann Mails nur erneut auslösen (`POST /api/admin/users/:id/resend-draw`).
+
 ## Geplant (Stufe 2)
 KI-Geschenkideen aus den Wünschen (Claude API) auf der Wichtel-Seite und in den Erinnerungsmails. Nur Interessen und Budget senden, keine Namen.
