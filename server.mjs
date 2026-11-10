@@ -16,7 +16,7 @@ if (!adminEmails.length) console.warn('ACHTUNG: ADMIN_EMAIL ist nicht gesetzt. O
 
 const db = openDb(env.DB_PATH || join(here, 'data', 'wichtel.db'));
 const mailer = createMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM || 'Wichtelbot <wichtel@ehrlichverwirrt.de>' });
-const service = createService({ db, mailer, siteUrl, adminEmails });
+const service = createService({ db, mailer, siteUrl, adminEmails, budget: env.BUDGET || '100 €' });
 service.ensureAdmins();
 
 const app = createApp({ service, publicDir: join(here, 'public'), siteUrl });

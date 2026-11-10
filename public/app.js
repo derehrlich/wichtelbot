@@ -72,24 +72,22 @@ function wishView() {
     name: el('input', { value: u.name, maxLength: 80, id: 'f-name' }),
     wishes: el('textarea', { value: u.wishes, maxLength: 3000, id: 'f-wishes', placeholder: 'z. B. Kaffee, Wandern, Fantasy-Bücher, Bastelzeug …' }),
     noGos: el('textarea', { value: u.noGos, maxLength: 1000, id: 'f-nogos', placeholder: 'z. B. keine Socken, keine Deko', style: 'min-height:70px' }),
-    budget: el('input', { value: u.budget, maxLength: 100, id: 'f-budget', placeholder: 'z. B. bis 30 €' }),
   };
   const save = async (ev) => {
     ev.preventDefault();
     try {
-      const p = await api('PUT', '/api/me', { name: f.name.value, wishes: f.wishes.value, noGos: f.noGos.value, budget: f.budget.value });
+      const p = await api('PUT', '/api/me', { name: f.name.value, wishes: f.wishes.value, noGos: f.noGos.value });
       state.user = p;
       flash(out, 'Gespeichert. Danke!');
     } catch (e) { flash(out, e.message, 'err'); }
   };
   return el('div', { class: 'card' },
     el('h2', {}, 'Mein Wunschzettel'),
-    el('p', { class: 'hint' }, 'Das sieht nur die Person, die dich beim Wichteln zieht, sonst niemand.'),
+    el('p', { class: 'hint' }, `Das sieht nur die Person, die dich beim Wichteln zieht, sonst niemand. Das Budget ist für alle gleich: ${state.budget}.`),
     el('form', { onsubmit: save },
       el('label', { htmlFor: 'f-name' }, 'Mein Name'), f.name,
       el('label', { htmlFor: 'f-wishes' }, 'Was wünsche ich mir?'), f.wishes,
       el('label', { htmlFor: 'f-nogos' }, 'Lieber nicht'), f.noGos,
-      el('label', { htmlFor: 'f-budget' }, 'Budget'), f.budget,
       el('button', { type: 'submit', class: 'green' }, 'Speichern')),
     out);
 }
@@ -143,6 +141,11 @@ function adminView() {
       el('td', { class: 'actions' },
         el('button', { class: 'small ghost', type: 'button', onclick: () => { edit.open = !edit.open; } }, 'Bearbeiten'),
         action('Einladung', async () => { await api('POST', `/api/admin/users/${u.id}/invite`); flash(out, `Einladung an ${u.name} geschickt.`); }, { cls: 'small ghost', host: out }),
+        u.inRound ? action('Wichtel nochmal mailen', async () => {
+          if (!confirm(`${u.name} den gezogenen Wichtel noch einmal per Mail schicken? Du siehst den Namen dabei nicht.`)) return;
+          await api('POST', `/api/admin/users/${u.id}/resend-draw`);
+          flash(out, `Die Mail mit dem Wichtel ist an ${u.name} unterwegs.`);
+        }, { cls: 'small ghost', host: out }) : null,
         u.isAdmin ? null : action('Löschen', async () => {
           if (!confirm(`${u.name} wirklich löschen?`)) return;
           await api('DELETE', `/api/admin/users/${u.id}`); await reload();
@@ -173,6 +176,14 @@ function adminView() {
     await reload(text);
   }, { host: out });
 
+  const resetBtn = action('Alles zurücksetzen', async () => {
+    const q = `ACHTUNG: Das löscht ALLE Teilnehmer (außer dir) und ALLE Auslosungen. Das geht nicht rückgängig.\n\nWirklich alles zurücksetzen?`;
+    if (!confirm(q)) return;
+    if (!confirm('Bist du ganz sicher? Danach ist die Liste leer.')) return;
+    const r = await api('POST', '/api/admin/reset', { confirm: 'ZURUECKSETZEN' });
+    await reload(`Zurückgesetzt. ${r.removedUsers} Teilnehmer und alle Auslosungen sind gelöscht.`);
+  }, { cls: 'small', host: out });
+
   return el('div', { class: 'card' },
     el('h2', {}, 'Organisator'),
     !admin.mailConfigured ? msg('Mailversand ist noch nicht eingerichtet (RESEND_API_KEY fehlt). Mails werden nur ins Server-Log geschrieben.', 'warn') : null,
@@ -188,20 +199,60 @@ function adminView() {
     el('h3', {}, 'Auslosung'),
     admin.round ? el('p', {}, `Letzte Auslosung: ${admin.round.year} (${new Date(admin.round.drawnAt).toLocaleDateString('de-DE')}).`) : el('p', {}, 'Es wurde noch nicht ausgelost.'),
     el('p', { class: 'hint' }, 'Wer „nimmt teil“ angehakt hat, wird ausgelost. Wen du gezogen hast, siehst du als Organisator nur in deiner eigenen Mail, so wie alle anderen.'),
-    drawBtn, out);
+    drawBtn,
+    el('h3', {}, 'Erinnerungen'),
+    remindersView(out, reload),
+    el('h3', {}, 'Zurücksetzen'),
+    el('p', { class: 'hint' }, 'Nach einem Test: löscht alle Teilnehmer außer dir und alle Auslosungen, damit du neu anfangen kannst. Dein Name und deine Wünsche bleiben.'),
+    resetBtn, out);
+}
+
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const REMINDER_TEXT = {
+  wishes: ['Wunschzettel', 'Bitte die Wünsche eintragen oder aktualisieren (nur an alle, die dieses Jahr noch nichts eingetragen haben).'],
+  assign1: ['Erste Erinnerung', 'Jeder bekommt noch einmal: „Du beschenkst …“ mit den Wünschen.'],
+  assign2: ['Zweite Erinnerung', 'Dasselbe noch einmal, jetzt mit dem Hinweis, dass es Zeit wird, etwas zu besorgen.'],
+};
+const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+
+function remindersView(out, reload) {
+  const rem = admin.reminders;
+  const hour = el('select', { id: 'r-hour' }, Array.from({ length: 24 }, (_, h) => el('option', { value: h, selected: h === rem.hour }, `${String(h).padStart(2, '0')}:00 Uhr`)));
+  const rows = rem.items.map((r) => {
+    const on = el('input', { type: 'checkbox', checked: r.enabled, id: `r-on-${r.id}` });
+    const day = el('input', { type: 'number', min: 1, max: 31, value: r.day, 'aria-label': 'Tag', style: 'width:70px' });
+    const month = el('select', { 'aria-label': 'Monat' }, MONTHS.map((n, i) => el('option', { value: i + 1, selected: i + 1 === r.month }, n)));
+    const [title, text] = REMINDER_TEXT[r.id];
+    return { id: r.id, on, day, month, node: el('div', { class: 'reminder' },
+      el('label', { htmlFor: `r-on-${r.id}`, style: 'display:flex;gap:8px;align-items:center' }, on, el('b', {}, title)),
+      el('div', { class: 'hint' }, text),
+      el('div', { class: 'row', style: 'margin-top:6px' }, el('div', {}, el('label', {}, 'Tag'), day), el('div', {}, el('label', {}, 'Monat'), month)),
+      el('div', { class: 'hint' },
+        r.enabled ? `Nächster Versand: ${fmtDay(r.nextDate)}.` : 'Ausgeschaltet.',
+        r.lastSent ? ` Zuletzt: ${r.lastSent.count} Mails (${r.lastSent.year}).` : ' Bisher nichts verschickt.')) };
+  });
+  return el('div', {},
+    el('p', { class: 'hint' }, 'Hier siehst du, wann die automatischen Erinnerungen rausgehen, und kannst die Termine ändern. Jede Mail geht pro Person nur einmal im Jahr raus. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt.'),
+    rows.map((r) => r.node),
+    el('div', { class: 'row' }, el('div', {}, el('label', { htmlFor: 'r-hour' }, 'Uhrzeit (deutsche Zeit)'), hour)),
+    action('Termine speichern', async () => {
+      const body = { hour: Number(hour.value) };
+      for (const r of rows) body[r.id] = { enabled: r.on.checked, day: Number(r.day.value), month: Number(r.month.value) };
+      await api('PUT', '/api/admin/reminders', body);
+      await reload('Die Erinnerungs-Termine sind gespeichert.');
+    }, { cls: 'green', host: out }));
 }
 
 function editBox(u, reload, out) {
   const f = {
     name: el('input', { value: u.name, maxLength: 80 }), email: el('input', { type: 'email', value: u.email }),
     wishes: el('textarea', { value: u.wishes, maxLength: 3000 }), noGos: el('textarea', { value: u.noGos, maxLength: 1000, style: 'min-height:60px' }),
-    budget: el('input', { value: u.budget, maxLength: 100 }),
   };
   return el('details', { class: 'edit' }, el('summary', {}, `${u.name} bearbeiten`),
     el('label', {}, 'Name'), f.name, el('label', {}, 'E-Mail'), f.email,
-    el('label', {}, 'Wünsche'), f.wishes, el('label', {}, 'Lieber nicht'), f.noGos, el('label', {}, 'Budget'), f.budget,
+    el('label', {}, 'Wünsche'), f.wishes, el('label', {}, 'Lieber nicht'), f.noGos,
     action('Speichern', async () => {
-      await api('PATCH', `/api/admin/users/${u.id}`, { name: f.name.value, email: f.email.value, wishes: f.wishes.value, noGos: f.noGos.value, budget: f.budget.value });
+      await api('PATCH', `/api/admin/users/${u.id}`, { name: f.name.value, email: f.email.value, wishes: f.wishes.value, noGos: f.noGos.value });
       await reload(`${f.name.value} gespeichert.`);
     }, { cls: 'green small', host: out }));
 }

@@ -30,6 +30,12 @@ Im Cloudflare-Dashboard beim bestehenden Tunnel einen **Public Hostname** hinzuf
 2. Unter **Organisator** alle Teilnehmer mit Name und E-Mail eintragen. Jeder bekommt eine Einladung.
 3. Ausnahmen setzen (z. B. Paare), dann **Jetzt auslosen**. Alle bekommen eine Mail mit ihrem Wichtel.
 
+## Nach einem Test alles zurücksetzen
+Im Organisator-Bereich ganz unten gibt es **Alles zurücksetzen**. Das löscht alle Teilnehmer (außer dir), alle Auslosungen und alle Ausnahmen. Du wirst zweimal gefragt. Dein eigener Name und deine Wünsche bleiben.
+
+## Budget
+Das Budget ist für alle gleich und steht in den Mails und auf der Wichtel-Seite: **100 €**. Ändern lässt es sich über die Einstellung `BUDGET` in CasaOS (z. B. `50 €`).
+
 ## Wer hat kein Smartphone?
 Es reicht eine E-Mail-Adresse, die er irgendwo öffnen kann (PC, Tablet, Handy von jemand anderem). Die Mail mit dem Wichtel kommt direkt an. Seine Wünsche kannst du über **Bearbeiten** für ihn eintragen.
 
@@ -41,7 +47,13 @@ Es reicht eine E-Mail-Adresse, die er irgendwo öffnen kann (PC, Tablet, Handy v
 | 1. Oktober | „Du beschenkst X" |
 | 1. November | „Du beschenkst X", zweite Erinnerung |
 
-Ab 9 Uhr deutscher Zeit. War der Server am 1. aus, wird bis zum 14. nachgeholt. Jede Mail geht pro Person nur einmal pro Jahr raus.
+Das sind die Standardtermine. Im Organisator-Bereich unter **Erinnerungen** siehst du, wann die nächste Mail rausgeht und an wie viele die letzte ging. Dort kannst du Tag und Monat jeder Erinnerung und die Uhrzeit ändern oder eine Erinnerung ausschalten. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt. Jede Mail geht pro Person nur einmal pro Jahr raus.
+
+## Wichtel nochmal mailen
+Hat jemand seine Mail verloren, klickst du in der Teilnehmerliste bei der Person auf **Wichtel nochmal mailen**. Die Mail geht nur an diese Person, du siehst den Namen nicht. Die Person selbst kann auf der Startseite auch „Mail nochmal schicken" wählen.
+
+## Du siehst die Auslosung nicht
+Die Zuordnung zeigt dir die Oberfläche nirgends. Der Name steht nur in der Mail an die jeweilige Person, auch in den Server-Logs taucht er nicht auf. Eine Ausnahme: Bei Resend zeigt das Dashboard unter *Emails* den Inhalt jeder verschickten Mail. Wenn du dort nicht in die Mails mit „Du hast … gezogen" klickst, bleibt es geheim.
 
 ## Datensicherung
 Alles liegt in `/DATA/AppData/wichtelbot/data` (eine Datei `wichtel.db`). Bitte in dein NAS-Backup aufnehmen. Geht sie verloren, sind die Zuordnungen weg, und niemand weiß mehr, wen er gezogen hat. In den Mails steht es aber noch.
