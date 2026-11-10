@@ -213,6 +213,12 @@ const REMINDER_TEXT = {
   assign1: ['Erste Erinnerung', 'Jeder bekommt noch einmal: „Du beschenkst …“ mit den Wünschen.'],
   assign2: ['Zweite Erinnerung', 'Dasselbe noch einmal, jetzt mit dem Hinweis, dass es Zeit wird, etwas zu besorgen.'],
 };
+const PLACEHOLDER_HELP = [
+  ['name', 'Name der Person, die die Mail bekommt'],
+  ['wichtel', 'Name des gezogenen Wichtels'],
+  ['budget', 'das Budget'],
+  ['jahr', 'Jahr der Auslosung'],
+];
 const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function remindersView(out, reload) {
@@ -223,23 +229,43 @@ function remindersView(out, reload) {
     const day = el('input', { type: 'number', min: 1, max: 31, value: r.day, 'aria-label': 'Tag', style: 'width:70px' });
     const month = el('select', { 'aria-label': 'Monat' }, MONTHS.map((n, i) => el('option', { value: i + 1, selected: i + 1 === r.month }, n)));
     const [title, text] = REMINDER_TEXT[r.id];
-    return { id: r.id, on, day, month, node: el('div', { class: 'reminder' },
+    const t = rem.texts[r.id];
+    const subject = el('input', { value: t.subject, maxLength: 150, id: `r-sub-${r.id}` });
+    const body = el('textarea', { value: t.body, maxLength: 3000, id: `r-body-${r.id}`, style: 'min-height:150px' });
+    const mailEdit = el('details', { class: 'edit' },
+      el('summary', {}, t.custom ? 'Mail-Text (angepasst)' : 'Mail-Text ansehen und ändern'),
+      el('label', { htmlFor: `r-sub-${r.id}` }, 'Betreff'), subject,
+      el('label', { htmlFor: `r-body-${r.id}` }, 'Text'), body,
+      el('p', { class: 'hint' }, 'Leere Zeile = neuer Absatz. Platzhalter: ', PLACEHOLDER_HELP.map(([k, d]) => el('span', {}, el('code', {}, `{${k}}`), ` ${d}; `))),
+      r.id === 'wishes' ? null : el('p', { class: 'hint' }, 'Unter dem Text erscheint automatisch der Name des Wichtels und der Knopf zur Wichtel-Seite.'),
+      el('div', { class: 'row' },
+        action('Probe-Mail an mich', async () => {
+          await api('POST', '/api/admin/reminders/test', { id: r.id, subject: subject.value, body: body.value });
+          flash(out, 'Die Probe-Mail ist unterwegs. Darin steht „Beispiel-Person“, nicht dein echter Wichtel.');
+        }, { cls: 'small ghost', host: out }),
+        el('button', { type: 'button', class: 'small ghost', onclick: () => { subject.value = t.defaultSubject; body.value = t.defaultBody; } }, 'Standardtext einsetzen')));
+    return { id: r.id, on, day, month, subject, body, node: el('div', { class: 'reminder' },
       el('label', { htmlFor: `r-on-${r.id}`, style: 'display:flex;gap:8px;align-items:center' }, on, el('b', {}, title)),
       el('div', { class: 'hint' }, text),
       el('div', { class: 'row', style: 'margin-top:6px' }, el('div', {}, el('label', {}, 'Tag'), day), el('div', {}, el('label', {}, 'Monat'), month)),
       el('div', { class: 'hint' },
         r.enabled ? `Nächster Versand: ${fmtDay(r.nextDate)}.` : 'Ausgeschaltet.',
-        r.lastSent ? ` Zuletzt: ${r.lastSent.count} Mails (${r.lastSent.year}).` : ' Bisher nichts verschickt.')) };
+        r.lastSent ? ` Zuletzt: ${r.lastSent.count} Mails (${r.lastSent.year}).` : ' Bisher nichts verschickt.'),
+      mailEdit) };
   });
   return el('div', {},
-    el('p', { class: 'hint' }, 'Hier siehst du, wann die automatischen Erinnerungen rausgehen, und kannst die Termine ändern. Jede Mail geht pro Person nur einmal im Jahr raus. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt.'),
+    el('p', { class: 'hint' }, 'Hier siehst du, wann die automatischen Erinnerungen rausgehen, und kannst Termine und Mail-Texte ändern. Jede Mail geht pro Person nur einmal im Jahr raus. War der Server am Termin aus, wird bis zu 14 Tage nachgeholt.'),
     rows.map((r) => r.node),
     el('div', { class: 'row' }, el('div', {}, el('label', { htmlFor: 'r-hour' }, 'Uhrzeit (deutsche Zeit)'), hour)),
-    action('Termine speichern', async () => {
+    action('Erinnerungen speichern', async () => {
       const body = { hour: Number(hour.value) };
-      for (const r of rows) body[r.id] = { enabled: r.on.checked, day: Number(r.day.value), month: Number(r.month.value) };
+      body.texts = {};
+      for (const r of rows) {
+        body[r.id] = { enabled: r.on.checked, day: Number(r.day.value), month: Number(r.month.value) };
+        body.texts[r.id] = { subject: r.subject.value, body: r.body.value };
+      }
       await api('PUT', '/api/admin/reminders', body);
-      await reload('Die Erinnerungs-Termine sind gespeichert.');
+      await reload('Die Erinnerungen (Termine und Texte) sind gespeichert.');
     }, { cls: 'green', host: out }));
 }
 
