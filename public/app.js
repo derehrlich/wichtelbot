@@ -22,7 +22,10 @@ async function api(method, path, body) {
 }
 
 const msg = (text, kind = 'ok') => el('div', { class: `msg ${kind}`, role: kind === 'err' ? 'alert' : 'status' }, text);
-function flash(host, text, kind = 'ok') { host.replaceChildren(msg(text, kind)); }
+function flash(host, text, kind = 'ok') {
+  host.replaceChildren(msg(text, kind));
+  host.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); // Meldung ins Bild holen, auch wenn sie weit unten steht
+}
 
 /** Knopf, der während der Arbeit gesperrt ist und Fehler anzeigt. */
 function action(label, fn, { cls = '', host } = {}) {
@@ -147,8 +150,12 @@ function adminView() {
           flash(out, `Die Mail mit dem Wichtel ist an ${u.name} unterwegs.`);
         }, { cls: 'small ghost', host: out }) : null,
         u.isAdmin ? null : action('Löschen', async () => {
-          if (!confirm(`${u.name} wirklich löschen?`)) return;
-          await api('DELETE', `/api/admin/users/${u.id}`); await reload();
+          const q = u.inRound
+            ? `${u.name} steckt in der aktuellen Auslosung. Wenn du ${u.name} löschst, wird die GANZE Auslosung verworfen. Alle müssen danach neu auslosen, und die bereits verschickten Wichtel-Links werden ungültig.\n\nTrotzdem löschen?`
+            : `${u.name} wirklich löschen?`;
+          if (!confirm(q)) return;
+          await api('DELETE', `/api/admin/users/${u.id}${u.inRound ? '?verwerfen=1' : ''}`);
+          await reload(u.inRound ? `${u.name} ist gelöscht. Die Auslosung wurde verworfen, du kannst neu auslosen.` : `${u.name} ist gelöscht.`);
         }, { cls: 'small', host: out })),
     ), el('tr', {}, el('td', { colSpan: 3, style: 'border:0;padding:0' }, edit))];
   }).flat();
