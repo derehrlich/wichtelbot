@@ -279,6 +279,42 @@ test('Erinnerungs-Texte: Standard, ändern, Platzhalter, Prüfung, Probe-Mail', 
   await assert.rejects(() => service.sendReminderTest(admin, { id: 'nix', subject: '', body: '' }), (e) => e.status === 404);
 });
 
+test('Löschen: Adresse ist danach wieder frei; bei laufender Auslosung nur mit Verwerfen', async () => {
+  const { service } = setup();
+  await addFamily(service, 3);
+  const id = (e) => service.adminState().users.find((u) => u.email === e)?.id;
+
+  // ohne Auslosung: löschen und gleich wieder anlegen
+  service.deleteUser(id('anna@example.de'));
+  await service.addUser({ name: 'Anna', email: 'anna@example.de' });
+  assert.ok(id('anna@example.de'));
+
+  await service.runDraw();
+  // mit Auslosung: ohne Bestätigung abgelehnt, Adresse bleibt belegt
+  assert.throws(() => service.deleteUser(id('bernd@example.de')), (e) => e.status === 409);
+  await assert.rejects(() => service.addUser({ name: 'Bernd', email: 'bernd@example.de' }), (e) => e.status === 409);
+
+  // mit Verwerfen: Person und Auslosung weg, Adresse wieder frei, neu auslosen möglich
+  service.deleteUser(id('bernd@example.de'), { discardDraw: true });
+  assert.equal(service.adminState().round, null);
+  await service.addUser({ name: 'Bernd', email: 'bernd@example.de' });
+  assert.equal((await service.runDraw()).count, 4);
+});
+
+test('HTTP: Löschen mit ?verwerfen=1', async () => {
+  const { service, mailer } = setup();
+  const app = createApp({ service, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
+  await addFamily(service, 3);
+  await service.requestLogin('chef@example.de');
+  const v = await http(app.handler, 'POST', '/api/auth/verify', { body: { token: mailer.outbox.at(-1).text.match(/token=([\w-]+)/)[1] } });
+  const cookie = v.cookie.split(';')[0];
+  await service.runDraw();
+  const anna = service.adminState().users.find((u) => u.name === 'Anna').id;
+  assert.equal((await http(app.handler, 'DELETE', `/api/admin/users/${anna}`, { cookie })).status, 409);
+  assert.equal((await http(app.handler, 'DELETE', `/api/admin/users/${anna}?verwerfen=1`, { cookie })).status, 200);
+  assert.equal(service.adminState().users.some((u) => u.name === 'Anna'), false);
+});
+
 test('Organisator kann einer Person den Wichtel erneut mailen (geht nur an sie)', async () => {
   const { service, mailer } = setup();
   await addFamily(service, 3);
