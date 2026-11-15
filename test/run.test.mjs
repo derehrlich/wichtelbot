@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../lib/db.mjs';
-import { createMailer } from '../lib/mail.mjs';
+import { createMailer, MailError } from '../lib/mail.mjs';
 import { createService, UserError } from '../lib/service.mjs';
 import { createApp } from '../lib/app.mjs';
 import { draw } from '../lib/draw.mjs';
@@ -277,6 +277,78 @@ test('Erinnerungs-Texte: Standard, ändern, Platzhalter, Prüfung, Probe-Mail', 
   assert.match(probe.subject, /^\[Probe\] .*Beispiel-Person/);
   await assert.rejects(() => service.sendReminderTest(admin, { id: 'assign2', subject: '', body: '{foo}' }), UserError);
   await assert.rejects(() => service.sendReminderTest(admin, { id: 'nix', subject: '', body: '' }), (e) => e.status === 404);
+});
+
+// ---------- Mailversand über Resend (mit Ersatz für das Netzwerk) ----------
+const resp = (status, body = '', headers = {}) => ({ ok: status >= 200 && status < 300, status, headers: { get: (k) => headers[k.toLowerCase()] ?? null }, text: async () => body });
+
+test('Resend: richtige Anfrage, Mails gehen mit Abstand nacheinander raus', async () => {
+  const calls = [];
+  const sleeps = [];
+  let t = 1000;
+  const mailer = createMailer({
+    apiKey: 're_test', from: 'Wichtelbot <wichtel@example.de>', minIntervalMs: 600,
+    now: () => t, sleep: async (ms) => { sleeps.push(ms); t += ms; },
+    fetchFn: async (url, opts) => { calls.push({ url, opts }); return resp(200, '{}'); },
+  });
+  await Promise.all([1, 2, 3].map((i) => mailer.send({ to: `a${i}@example.de`, subject: 'S', text: 'T', html: '<p>T</p>', secret: true })));
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].url, 'https://api.resend.com/emails');
+  assert.equal(calls[0].opts.headers.Authorization, 'Bearer re_test');
+  const body = JSON.parse(calls[0].opts.body);
+  assert.deepEqual(Object.keys(body).sort(), ['from', 'html', 'subject', 'text', 'to'], 'kein internes Feld wie secret wird mitgeschickt');
+  assert.deepEqual(body.to, ['a1@example.de']);
+  assert.equal(sleeps.filter((ms) => ms > 0).length, 2, 'zwischen drei Mails zwei Pausen');
+  assert.ok(sleeps.every((ms) => ms <= 600));
+});
+
+test('Resend: bei „zu viele Anfragen“ (429) wird wiederholt, sonst gibt es eine verständliche Fehlermeldung', async () => {
+  const sleeps = [];
+  let n = 0;
+  const flaky = createMailer({
+    apiKey: 'k', from: 'f', minIntervalMs: 0, sleep: async (ms) => sleeps.push(ms),
+    fetchFn: async () => (++n < 3 ? resp(429, 'rate limit', { 'retry-after': '2' }) : resp(200)),
+  });
+  await flaky.send({ to: 'a@example.de', subject: 'S', text: 'T', html: 'T' });
+  assert.equal(n, 3);
+  assert.deepEqual(sleeps, [2000, 2000], 'wartet so lange, wie Resend verlangt');
+
+  const denied = createMailer({ apiKey: 'k', from: 'f', minIntervalMs: 0, sleep: async () => {}, fetchFn: async () => resp(403, 'The domain is not verified') });
+  await assert.rejects(() => denied.send({ to: 'a@example.de', subject: 'S', text: 'T', html: 'T' }),
+    (e) => e instanceof MailError && e.status === 403 && /not verified/.test(e.message), '403 wird nicht wiederholt');
+
+  const down = createMailer({ apiKey: 'k', from: 'f', minIntervalMs: 0, retries: 1, sleep: async () => {}, fetchFn: async () => { throw new Error('ENOTFOUND'); } });
+  await assert.rejects(() => down.send({ to: 'a@example.de', subject: 'S', text: 'T', html: 'T' }), /nicht erreichbar/);
+
+  // Ein Fehler blockiert die Schlange nicht
+  let k = 0;
+  const mixed = createMailer({ apiKey: 'k', from: 'f', minIntervalMs: 0, retries: 0, sleep: async () => {}, fetchFn: async () => (++k === 1 ? resp(400, 'bad') : resp(200)) });
+  const first = mixed.send({ to: 'x@example.de', subject: 'S', text: 'T', html: 'T' }).catch((e) => e);
+  await mixed.send({ to: 'y@example.de', subject: 'S', text: 'T', html: 'T' });
+  assert.ok((await first) instanceof MailError);
+});
+
+test('Person anlegen: scheitert nur die Mail, bleibt die Person angelegt und der Fehler wird gemeldet; Mail-Test zeigt Fehler', async () => {
+  const db = openDb(':memory:');
+  const failing = { configured: true, outbox: [], async send() { throw new MailError('Resend meldet Fehler 403: domain not verified', 403); } };
+  const service = createService({ db, mailer: failing, siteUrl: SITE, adminEmails: ['chef@example.de'] });
+  service.ensureAdmins();
+  const r = await service.addUser({ name: 'Anna', email: 'anna@example.de' });
+  assert.match(r.mailError, /domain not verified/);
+  assert.ok(service.adminState().users.some((u) => u.email === 'anna@example.de'));
+  await assert.rejects(() => service.sendMailTest(service.internals.q.userById.get(1)), (e) => e instanceof MailError);
+
+  const ok = createMailer({ log: () => {} });
+  const svc2 = createService({ db: openDb(':memory:'), mailer: ok, siteUrl: SITE, adminEmails: ['chef@example.de'] });
+  svc2.ensureAdmins();
+  await svc2.requestLogin('chef@example.de');
+  const app2 = createApp({ service: svc2, publicDir: new URL('../public/', import.meta.url).pathname, siteUrl: SITE });
+  const v = await http(app2.handler, 'POST', '/api/auth/verify', { body: { token: ok.outbox.at(-1).text.match(/token=([\w-]+)/)[1] } });
+  const cookie = v.cookie.split(';')[0];
+  const before = ok.outbox.length;
+  assert.equal((await http(app2.handler, 'POST', '/api/admin/mail-test', { cookie, body: {} })).status, 200);
+  assert.equal(ok.outbox.length, before + 1);
+  assert.equal(ok.outbox.at(-1).to, 'chef@example.de');
 });
 
 test('Löschen: Adresse ist danach wieder frei; bei laufender Auslosung nur mit Verwerfen', async () => {

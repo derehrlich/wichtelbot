@@ -25,5 +25,7 @@
 - Seiten verweisen auf `app.js?v={{V}}` (Hash der Oberflächen-Dateien, in `lib/app.mjs`), damit Browser und Cloudflare nach Updates nichts Altes zeigen. Neue Skripte/Stylesheets in `public/*.html` immer mit `?v={{V}}` einbinden.
 - Mails mit dem gezogenen Namen werden mit `secret: true` verschickt und nie ins Log geschrieben. Die Oberfläche zeigt dem Organisator die Zuordnung nirgends; er kann Mails nur erneut auslösen (`POST /api/admin/users/:id/resend-draw`).
 
+- Mailversand (`lib/mail.mjs`): Schlange mit mind. 600 ms Abstand (Resend: 2 Anfragen/s), Wiederholung bei 429/5xx (nach `Retry-After`), Fehler als `MailError` (HTTP 502 mit Resend-Text). Neue Personen werden auch dann angelegt, wenn nur die Einladungs-Mail scheitert (`mailError` in der Antwort). Organisator-Knopf „Mail-Test an mich" (`POST /api/admin/mail-test`).
+
 ## Geplant (Stufe 2)
 KI-Geschenkideen aus den Wünschen (Claude API) auf der Wichtel-Seite und in den Erinnerungsmails. Nur Interessen und Budget senden, keine Namen.
