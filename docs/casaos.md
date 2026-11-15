@@ -67,6 +67,13 @@ Hat jemand seine Mail verloren, klickst du in der Teilnehmerliste bei der Person
 ## Du siehst die Auslosung nicht
 Die Zuordnung zeigt dir die Oberfläche nirgends. Der Name steht nur in der Mail an die jeweilige Person, auch in den Server-Logs taucht er nicht auf. Eine Ausnahme: Bei Resend zeigt das Dashboard unter *Emails* den Inhalt jeder verschickten Mail. Wenn du dort nicht in die Mails mit „Du hast … gezogen" klickst, bleibt es geheim.
 
+## Es kommen keine Mails an – so suchst du den Fehler
+1. Im Organisator-Bereich ganz oben auf **Mail-Test an mich** klicken. Kommt die Mail an, funktioniert der Versand. Wenn nicht, steht in der roten Meldung der genaue Grund von Resend (z. B. „domain is not verified" oder „API key is invalid").
+2. **Resend-Dashboard → Emails:** Dort steht jede Mail mit Status. „Delivered" heißt zugestellt (dann im Spam-Ordner suchen), „Bounced" oder „Suppressed" heißt, die Adresse wird von Resend gesperrt.
+3. In CasaOS bei der Kachel die Einstellungen prüfen: `RESEND_API_KEY` beginnt mit `re_`, `ADMIN_EMAIL` ist deine echte Adresse, `MAIL_FROM` gehört zu deiner bestätigten Domain.
+4. Resend erlaubt im kostenlosen Tarif **2 Mails pro Sekunde** und **100 pro Tag**. Der Wichtelbot hält den Abstand ein und versucht es bei „zu viele Anfragen" automatisch noch einmal. Bei einer Auslosung für die Familie sind das nur wenige Sekunden.
+5. Wird beim Hinzufügen einer Person nur die Einladung nicht zugestellt, bleibt die Person trotzdem angelegt. Du siehst eine gelbe Meldung und kannst die Einladung später mit **Einladung** erneut schicken.
+
 ## Datensicherung
 Alles liegt in `/DATA/AppData/wichtelbot/data` (eine Datei `wichtel.db`). Bitte in dein NAS-Backup aufnehmen. Geht sie verloren, sind die Zuordnungen weg, und niemand weiß mehr, wen er gezogen hat. In den Mails steht es aber noch.
 

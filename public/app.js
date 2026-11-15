@@ -113,7 +113,7 @@ function statusView() {
 // ---------- Organisator ----------
 function adminView() {
   const out = el('div');
-  const reload = async (text) => { await load(); if (text) flashTop(text); };
+  const reload = async (text, kind = 'ok') => { await load(); if (text) flashTop(text, kind); };
   const nameOf = (id) => admin.users.find((u) => u.id === id)?.name ?? '?';
 
   // Person hinzufügen
@@ -121,8 +121,11 @@ function adminView() {
   const em = el('input', { id: 'a-mail', type: 'email', placeholder: 'E-Mail', required: true });
   const addForm = el('form', { onsubmit: async (ev) => {
     ev.preventDefault();
-    try { await api('POST', '/api/admin/users', { name: nm.value, email: em.value }); await reload(`${nm.value} ist eingetragen und hat eine Einladung per Mail bekommen.`); }
-    catch (e) { flash(out, e.message, 'err'); }
+    try {
+      const r = await api('POST', '/api/admin/users', { name: nm.value, email: em.value });
+      if (r.mailError) await reload(`${nm.value} ist eingetragen, aber die Einladungs-Mail ist NICHT angekommen: ${r.mailError} Du kannst sie später bei der Person mit „Einladung“ noch einmal schicken. Prüfe zuerst mit dem Mail-Test unten, ob der Mailversand funktioniert.`, 'warn');
+      else await reload(`${nm.value} ist eingetragen und hat eine Einladung per Mail bekommen.`);
+    } catch (e) { flash(out, e.message, 'err'); }
   } }, el('div', { class: 'row' },
     el('div', {}, el('label', { htmlFor: 'a-name' }, 'Name'), nm),
     el('div', {}, el('label', { htmlFor: 'a-mail' }, 'E-Mail'), em),
@@ -194,6 +197,12 @@ function adminView() {
   return el('div', { class: 'card' },
     el('h2', {}, 'Organisator'),
     !admin.mailConfigured ? msg('Mailversand ist noch nicht eingerichtet (RESEND_API_KEY fehlt). Mails werden nur ins Server-Log geschrieben.', 'warn') : null,
+    el('div', { class: 'row', style: 'align-items:center' },
+      el('span', { class: 'hint' }, admin.mailConfigured ? 'Mailversand: über Resend eingerichtet.' : 'Mailversand: AUS.'),
+      action('Mail-Test an mich', async () => {
+        await api('POST', '/api/admin/mail-test');
+        flash(out, 'Die Test-Mail ist abgeschickt. Kommt sie nicht an, schau in den Spam-Ordner und bei Resend unter „Emails“.');
+      }, { cls: 'small ghost', host: out })),
     el('h3', {}, 'Teilnehmer'),
     el('p', { class: 'hint' }, 'Jeder neue Teilnehmer bekommt eine Einladung per Mail. Wer kein Smartphone nutzt, braucht nur eine E-Mail-Adresse, die er irgendwo öffnen kann. Über „Bearbeiten“ kannst du auch Wünsche für jemanden eintragen.'),
     el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Person'), el('th', {}, 'Auslosung'), el('th', {}))), el('tbody', {}, rows)),
@@ -292,12 +301,12 @@ function editBox(u, reload, out) {
 
 // ---------- Aufbau ----------
 let topMsg = null;
-function flashTop(text) { topMsg = text; render(); }
+function flashTop(text, kind = 'ok') { topMsg = { text, kind }; render(); }
 
 function render() {
   if (!state) { app.replaceChildren(loginView()); return; }
   const parts = [];
-  if (topMsg) { parts.push(msg(topMsg)); topMsg = null; }
+  if (topMsg) { parts.push(msg(topMsg.text, topMsg.kind)); topMsg = null; window.scrollTo?.({ top: 0, behavior: 'smooth' }); }
   parts.push(statusView(), wishView());
   if (admin) parts.push(adminView());
   parts.push(el('p', { style: 'text-align:center' }, action('Abmelden', async () => { await api('POST', '/api/logout', {}); state = null; admin = null; render(); }, { cls: 'ghost' })));
